@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>walidcode — Swarm Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --purple: #bc8cff; --orange: #ffa657;
+    --user-bg: #1c2128; --agent-bg: #161b22;
+    --radius: 8px; --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font); height: 100dvh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+  }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+  #status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--red); transition: background 0.3s;
+  }
+  #status-dot.connected { background: var(--green); }
+  #header-info { margin-left: auto; font-size: 0.78rem; color: var(--muted); }
+
+  /* ── Main layout ── */
+  main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Chat panel ── */
+  #chat-panel {
+    flex: 1; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border); overflow: hidden;
+  }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    scroll-behavior: smooth;
+  }
+  #messages::-webkit-scrollbar { width: 6px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .msg { border-radius: var(--radius); padding: 10px 14px; max-width: 100%; }
+  .msg-system  { background: transparent; color: var(--muted); font-size: 0.82rem; font-style: italic; }
+  .msg-user    { background: var(--user-bg); border-left: 3px solid var(--accent); }
+  .msg-agent   { background: var(--agent-bg); border-left: 3px solid var(--green); }
+  .msg-inter   { background: var(--agent-bg); border-left: 3px solid var(--purple); font-size: 0.88rem; }
+  .msg-task    { background: transparent; color: var(--muted); font-size: 0.8rem; }
+
+  .msg-header {
+    display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px;
+  }
+  .msg-source { font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: .04em; }
+  .msg-time   { font-size: 0.72rem; color: var(--muted); }
+  .msg-body   { font-size: 0.9rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  .msg-body code {
+    background: #1f2937; padding: 1px 5px; border-radius: 4px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em;
+  }
+  .msg-body pre {
+    background: #1f2937; padding: 10px 14px; border-radius: 6px; overflow-x: auto;
+    margin: 6px 0; font-size: 0.82rem; line-height: 1.4;
+    border: 1px solid var(--border);
+  }
+
+  /* ── Input row ── */
+  #input-row {
+    display: flex; gap: 8px; padding: 12px 16px;
+    background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
+  }
+  #target-select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 0 10px; font-size: 0.85rem;
+    cursor: pointer; min-width: 110px;
+  }
+  #msg-input {
+    flex: 1; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 9px 14px; font-size: 0.92rem; font-family: var(--font);
+    outline: none; resize: none; min-height: 40px; max-height: 120px;
+    transition: border-color 0.2s;
+  }
+  #msg-input:focus { border-color: var(--accent); }
+  #send-btn {
+    background: var(--accent); color: #000; border: none;
+    border-radius: var(--radius); padding: 9px 20px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s; flex-shrink: 0;
+  }
+  #send-btn:hover { opacity: 0.85; }
+  #send-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Right sidebar ── */
+  #sidebar {
+    width: 230px; display: flex; flex-direction: column;
+    background: var(--surface); overflow: hidden;
+  }
+  .sidebar-section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .sidebar-section h3 { font-size: 0.75rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+
+  .agent-card {
+    background: var(--bg); border-radius: 6px; padding: 8px 10px;
+    margin-bottom: 6px; cursor: pointer; border: 1px solid transparent;
+    transition: border-color 0.15s;
+  }
+  .agent-card:hover { border-color: var(--border); }
+  .agent-card.selected { border-color: var(--accent); }
+  .agent-name { font-size: 0.88rem; font-weight: 600; }
+  .agent-role { font-size: 0.75rem; color: var(--muted); }
+  .agent-status {
+    display: inline-block; font-size: 0.7rem; padding: 1px 6px;
+    border-radius: 10px; margin-top: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .status-ready        { background: #1a4731; color: var(--green); }
+  .status-busy         { background: #3d2b00; color: var(--yellow); }
+  .status-reconnecting { background: #2d1e00; color: var(--orange); }
+  .status-failed       { background: #3d0a0a; color: var(--red); }
+  .status-starting     { background: #0d1b3b; color: var(--accent); }
+  .status-stopped      { background: #1a1a1a; color: var(--muted); }
+
+  /* ── Slash command hint ── */
+  #cmd-hints {
+    padding: 6px 16px; font-size: 0.75rem; color: var(--muted);
+    background: var(--surface); border-top: 1px solid var(--border);
+    flex-shrink: 0; display: none;
+  }
+  #cmd-hints.visible { display: block; }
+
+  /* ── Misc ── */
+  .typing-indicator { color: var(--muted); font-style: italic; font-size: 0.82rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot" title="Connection status"></div>
+  <h1>⚡ walidcode — Swarm Dashboard</h1>
+  <span id="header-info">Connecting…</span>
+</header>
+
+<main>
+  <!-- Chat panel -->
+  <div id="chat-panel">
+    <div id="messages"></div>
+
+    <div id="cmd-hints" id="cmd-hints">
+      <strong>Slash commands:</strong>
+      /assign &lt;agent_id&gt; &lt;msg&gt; &nbsp;·&nbsp;
+      /broadcast &lt;msg&gt; &nbsp;·&nbsp;
+      /agents &nbsp;·&nbsp; /status &nbsp;·&nbsp;
+      /ingest &lt;path&gt; &nbsp;·&nbsp;
+      /add_agent &lt;id|url|role&gt; &nbsp;·&nbsp;
+      /clear
+    </div>
+
+    <div id="input-row">
+      <select id="target-select" title="Route to specific agent">
+        <option value="">Auto-route</option>
+      </select>
+      <textarea id="msg-input" rows="1"
+        placeholder="Message all agents…  (/ for commands)"
+        autocomplete="off" spellcheck="false"></textarea>
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h3>Agents</h3>
+      <div id="agent-list"><p style="color:var(--muted);font-size:.8rem">Loading…</p></div>
+    </div>
+    <div class="sidebar-section" style="flex:1;overflow-y:auto;">
+      <h3>Swarm Info</h3>
+      <div id="swarm-info" style="font-size:.78rem;color:var(--muted);line-height:1.7"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const DAEMON = location.origin;
+const WS_URL = `${location.origin.replace('http','ws')}/ws`;
+
+let ws = null;
+let agents = [];
+let selectedAgent = null;
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('status-dot').classList.add('connected');
+    sysMsg('✅ Connected to daemon');
+    refreshAgents();
+  };
+
+  ws.onclose = () => {
+    document.getElementById('status-dot').classList.remove('connected');
+    document.getElementById('header-info').textContent = 'Reconnecting…';
+    sysMsg('🔌 Disconnected — retrying in 4 s…');
+    setTimeout(connectWS, 4000);
+  };
+
+  ws.onerror = () => {};
+
+  ws.onmessage = ({ data }) => {
+    try {
+      const msg = JSON.parse(data);
+      if (msg.type === 'ping') { ws.send(JSON.stringify({type:'pong'})); return; }
+      renderMessage(msg);
+    } catch(e) {}
+  };
+}
+
+// ── Message rendering ──────────────────────────────────────────────────────
+const ROLE_COLORS = {
+  coder:'#58a6ff', reviewer:'#3fb950', tester:'#d29922',
+  architect:'#bc8cff', researcher:'#ffa657', general:'#c9d1d9',
+  user:'#e6edf3', system:'#8b949e', orchestrator:'#79c0ff',
+};
+
+function ts(t) {
+  return new Date(t*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatBody(text) {
+  // Code blocks
+  text = escHtml(text)
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  return text;
+}
+
+function renderMessage(msg) {
+  const box  = document.getElementById('messages');
+  const type = msg.type;
+  const src  = msg.source || '?';
+  const div  = document.createElement('div');
+  div.className = 'msg';
+
+  if (type === 'system') {
+    div.classList.add('msg-system');
+    div.textContent = msg.content;
+
+  } else if (type === 'user_input') {
+    div.classList.add('msg-user');
+    div.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-source" style="color:${ROLE_COLORS.user}">YOU</span>
+        <span class="msg-time">${ts(msg.timestamp)}</span>
+      </div>
+      <div class="msg-body">${formatBody(msg.content)}</div>`;
+
+  } else if (type === 'agent_response') {
+    div.classList.add('msg-agent');
+    const col = ROLE_COLORS[msg.metadata?.role] || ROLE_COLORS.general;
+    const display = msg.content.length > 1000
+      ? msg.content.slice(0,1000) + '\n… [truncated — full response in terminal]'
+      : msg.content;
+    div.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-source" style="color:${col}">${src.toUpperCase()}</span>
+        <span class="msg-time">${ts(msg.timestamp)}</span>
+      </div>
+      <div class="msg-body">${formatBody(display)}</div>`;
+
+  } else if (type === 'inter_agent') {
+    div.classList.add('msg-inter');
+    div.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-source" style="color:#bc8cff">↔ ${src} → ${msg.target}</span>
+        <span class="msg-time">${ts(msg.timestamp)}</span>
+      </div>
+      <div class="msg-body">${escHtml(msg.content.slice(0,300))}</div>`;
+
+  } else if (type === 'agent_task') {
+    div.classList.add('msg-task');
+    div.textContent = `→ task routed to [${msg.target}]`;
+
+  } else {
+    return; // ignore other types
+  }
+
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function sysMsg(text) {
+  renderMessage({ type:'system', content:text, timestamp: Date.now()/1000 });
+}
+
+// ── Agent sidebar ──────────────────────────────────────────────────────────
+async function refreshAgents() {
+  try {
+    const r = await fetch(`${DAEMON}/api/agents`);
+    const d = await r.json();
+    agents = d.agents || [];
+    renderAgents();
+
+    const info = await (await fetch(`${DAEMON}/api/status`)).json();
+    document.getElementById('header-info').textContent =
+      `Agents: ${info.agents}  ·  Uptime: ${Math.floor(info.uptime_s)}s  ·  WS: ${info.ws_clients}`;
+    document.getElementById('swarm-info').innerHTML =
+      `PID: ${info.pid}<br>Uptime: ${info.uptime_s}s<br>WS clients: ${info.ws_clients}`;
+  } catch(e) {}
+}
+
+function renderAgents() {
+  const list   = document.getElementById('agent-list');
+  const select = document.getElementById('target-select');
+  // Keep existing auto-route option
+  while (select.options.length > 1) select.remove(1);
+
+  if (!agents.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:.8rem">No agents</p>';
+    return;
+  }
+  list.innerHTML = '';
+  agents.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'agent-card' + (selectedAgent === a.id ? ' selected' : '');
+    card.dataset.id = a.id;
+    card.innerHTML = `
+      <div class="agent-name">${a.emoji || '🤖'} ${a.id}</div>
+      <div class="agent-role">${a.role} · ${a.platform}</div>
+      <span class="agent-status status-${a.status}">${a.status}</span>`;
+    card.onclick = () => {
+      selectedAgent = selectedAgent === a.id ? null : a.id;
+      document.getElementById('target-select').value = selectedAgent || '';
+      renderAgents();
+    };
+    list.appendChild(card);
+
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = `${a.emoji || '🤖'} ${a.id}`;
+    select.appendChild(opt);
+  });
+}
+
+setInterval(refreshAgents, 8000);
+
+// ── Input handling ─────────────────────────────────────────────────────────
+const input   = document.getElementById('msg-input');
+const sendBtn = document.getElementById('send-btn');
+const hints   = document.getElementById('cmd-hints');
+
+input.addEventListener('input', () => {
+  // Auto-resize
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  // Show hint panel
+  hints.classList.toggle('visible', input.value.startsWith('/'));
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+
+sendBtn.addEventListener('click', send);
+document.getElementById('target-select').addEventListener('change', e => {
+  selectedAgent = e.target.value || null;
+});
+
+async function send() {
+  const text   = input.value.trim();
+  if (!text) return;
+  input.value  = '';
+  input.style.height = 'auto';
+  hints.classList.remove('visible');
+
+  if (text.startsWith('/')) {
+    await handleSlash(text);
+    return;
+  }
+
+  const target = document.getElementById('target-select').value || null;
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type:'user_input', content:text, target }));
+  } else {
+    // HTTP fallback
+    await fetch(`${DAEMON}/api/message`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content:text, target})
+    });
+    renderMessage({type:'user_input',content:text,source:'user',timestamp:Date.now()/1000});
+  }
+}
+
+async function handleSlash(cmd) {
+  const parts = cmd.slice(1).trim().split(/\s+/);
+  const verb  = parts[0].toLowerCase();
+
+  if (verb === 'clear') {
+    document.getElementById('messages').innerHTML = '';
+  } else if (verb === 'agents') {
+    await refreshAgents();
+    sysMsg('Agent panel refreshed.');
+  } else if (verb === 'status') {
+    const r = await fetch(`${DAEMON}/api/status`);
+    sysMsg(JSON.stringify(await r.json(), null, 2));
+  } else if (verb === 'broadcast' && parts.length > 1) {
+    const msg = parts.slice(1).join(' ');
+    await fetch(`${DAEMON}/api/broadcast`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content:msg})
+    });
+    renderMessage({type:'user_input',content:`[broadcast] ${msg}`,source:'user',timestamp:Date.now()/1000});
+  } else if (verb === 'assign' && parts.length > 2) {
+    const agentId = parts[1];
+    const msg     = parts.slice(2).join(' ');
+    await fetch(`${DAEMON}/api/message`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content:msg, target:agentId})
+    });
+    sysMsg(`→ Task sent to [${agentId}]`);
+  } else if (verb === 'add_agent' && parts.length > 1) {
+    const spec = parts.slice(1).join(' ');
+    const ap   = spec.split('|');
+    if (ap.length >= 2) {
+      await fetch(`${DAEMON}/api/agents/add`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({agent_id:ap[0].trim(), chat_url:ap[1].trim(), role:ap[2]?.trim()||'general'})
+      });
+      sysMsg(`Spawn requested for agent '${ap[0]}'.`);
+      await refreshAgents();
+    } else {
+      sysMsg('Usage: /add_agent id|url|role');
+    }
+  } else if (verb === 'ingest' && parts.length > 1) {
+    sysMsg(`⏳ Ingesting ${parts[1]} — this may take a moment…`);
+    // The TUI handles this; from web UI we just notify
+    sysMsg(`Use the TUI (/ingest) or CLI for project ingestion. Then paste the context.`);
+  } else if (verb === 'help') {
+    sysMsg('/assign <id> <msg>  ·  /broadcast <msg>  ·  /agents  ·  /status  ·  /add_agent <id|url|role>  ·  /clear  ·  /help');
+  } else {
+    sysMsg(`Unknown command: /${verb}  (try /help)`);
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+connectWS();
+</script>
+</body>
+</html>
